@@ -8,7 +8,6 @@ import json
 # Initialize OpenAI client
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-
 ProgramindexName = "programs"
 ScholarshipIndexName = "scholar"
 
@@ -278,7 +277,7 @@ def extract_multiple_keywords(query):
 
 def search_programs(input_keywords_list, model, client, max_results=10):
     """
-    Enhanced semantic search for programs with OpenAI context analysis
+    Enhanced semantic search for programs with location-specific filtering
     """
     all_results = {}
     base_weights = {
@@ -292,10 +291,9 @@ def search_programs(input_keywords_list, model, client, max_results=10):
     }
     
     vector_fields = list(base_weights.keys())
-    location_results = {}
+    location_specific_results = []
     
     try:
-        # Initialize Elasticsearch clients
         client1 = Elasticsearch(
             "https://149ddf030ad64e34a068782db7c12c33.us-central1.gcp.cloud.es.io:443",
             api_key="RlhmcEVwVUJ0VDVKQ3FBOFMyUDg6MWZSRll4eWJSWFdEdlZ0cjJZX2RsQQ=="
@@ -308,6 +306,10 @@ def search_programs(input_keywords_list, model, client, max_results=10):
         # Get context-adjusted weights and detected location
         adjusted_weights, detected_location = analyze_search_context(keywords, base_weights, client)
         vector_of_input_keyword = model.encode(keywords)
+        
+        # If location is detected, normalize it
+        if detected_location:
+            detected_location = normalize_location(detected_location, client)
         
         for field in vector_fields:
             query = {
@@ -327,45 +329,63 @@ def search_programs(input_keywords_list, model, client, max_results=10):
                 )
                 
                 for hit in res["hits"]["hits"]:
-                    uni_id = f"{hit['_source']['universityName']}_{hit['_source']['courseTitle']}"
+                    source = hit['_source']
+                    uni_id = f"{source['universityName']}_{source['courseTitle']}"
                     score = hit["_score"] * adjusted_weights[field]
                     
-                    # Location-based scoring
-                    source = hit['_source']
+                    # Check if the result matches the detected location
                     source_location = str(source.get('location', '')).lower()
+                    location_match = (
+                        detected_location and 
+                        detected_location.lower() in source_location
+                    )
                     
-                    # Apply location boost if location was detected
-                    if detected_location and detected_location.lower() in source_location:
-                        score *= 2.0
-                        
-                    if uni_id in all_results:
-                        all_results[uni_id]["score"] += score
-                    else:
-                        all_results[uni_id] = {
-                            "hit": hit,
-                            "score": score,
-                            "location": source_location
-                        }
-                        
-                    # Track results by location if location was detected
+                    # Only add to results if location matches (when location is specified)
                     if detected_location:
-                        if detected_location not in location_results:
-                            location_results[detected_location] = []
-                        if uni_id not in location_results[detected_location]:
-                            location_results[detected_location].append(uni_id)
+                        if location_match:
+                            if uni_id not in location_specific_results:
+                                location_specific_results.append(uni_id)
+                            if uni_id in all_results:
+                                all_results[uni_id]["score"] += score * 2.0  # Double score for location match
+                            else:
+                                all_results[uni_id] = {
+                                    "hit": hit,
+                                    "score": score * 2.0,
+                                    "location": source_location
+                                }
+                    else:
+                        # If no location specified, add all results
+                        if uni_id in all_results:
+                            all_results[uni_id]["score"] += score
+                        else:
+                            all_results[uni_id] = {
+                                "hit": hit,
+                                "score": score,
+                                "location": source_location
+                            }
                         
             except Exception as e:
                 st.warning(f"Warning: Search failed for field {field}: {str(e)}")
                 continue
     
-    # Check if we found results for detected location
-    if detected_location and (detected_location not in location_results or not location_results[detected_location]):
-        st.warning(f"⚠️ No programs found in {detected_location}. Showing results from other locations.")
+    # Handle location-specific results
+    if detected_location:
+        if not location_specific_results:
+            st.warning(f"⚠️ No programs found in {detected_location}.")
+            return []  # Return empty list if no programs found in specified location
+        else:
+            # Only return results from the specified location
+            filtered_results = {k: v for k, v in all_results.items() 
+                              if k in location_specific_results}
+            sorted_results = sorted(filtered_results.values(), 
+                                  key=lambda x: x["score"], 
+                                  reverse=True)
+            return [item["hit"] for item in sorted_results[:max_results]]
     
+    # If no location specified, return all results
     sorted_results = sorted(all_results.values(), 
                           key=lambda x: x["score"], 
                           reverse=True)
-    
     return [item["hit"] for item in sorted_results[:max_results]]
 
 def search_scholarships(input_keywords_list, model, client, max_results=10):
@@ -565,12 +585,12 @@ def main():
         st.markdown('<div class="search-container">', unsafe_allow_html=True)
         st.markdown("### 🔍 Ask me anything about programs or scholarships!")
         st.markdown("*Try natural language queries! For example:* \n\n" +
-                   "*'Find affordable computer science programs in the UK with good job prospects'* or \n" +
-                   "*'Show me engineering scholarships in Australia for international students'*")
+                   "*'Find computer science programs in the UK'* or \n" +
+                   "*'Show me MBA programs in Australia'*")
         
         search_query = st.text_area(
             "Enter your question in natural language",
-            placeholder="For example: 'Find affordable computer science programs in the UK with good job prospects'",
+            placeholder="For example: 'Find computer science programs in the UK'",
             height=100
         )
         
@@ -585,19 +605,13 @@ def main():
         st.markdown("### ⚙️ Search Filters")
         max_results = st.slider("Maximum Results", 1, 50, 10)
         
-        # Add advanced filters if needed
-        with st.expander("Advanced Filters"):
-            st.markdown("Coming soon...")
     
     if st.button("🔍 Search", type="primary"):
         if search_query:
             with st.spinner("🔄 Processing your query..."):
-                # Extract multiple keyword sets
                 keywords_list = extract_multiple_keywords(search_query)
-                st.info(f"🎯 Searching with refined keywords: {' | '.join(keywords_list)}")
                 
                 try:
-                    # Search based on type
                     if search_type == "Programs":
                         program_results = search_programs(
                             keywords_list, 
@@ -606,11 +620,8 @@ def main():
                             max_results=max_results
                         )
                         if program_results:
-                            #st.success(f"Found {len(program_results)} matching programs!")
                             display_program_results(program_results)
-                        else:
-                            st.info("No matching programs found. Try broadening your search criteria.")
-                    else:  # search_type == "Scholarships"
+                    else:
                         scholarship_results = search_scholarships(
                             keywords_list,
                             model,
