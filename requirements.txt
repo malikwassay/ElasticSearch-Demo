@@ -1,0 +1,4 @@
+streamlit
+elasticsearch
+sentence_transformers
+openai
