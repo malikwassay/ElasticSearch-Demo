@@ -5,7 +5,7 @@ from openai import OpenAI
 import os
 
 # Initialize OpenAI client
-client = OpenAI(api_key="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")
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 ProgramindexName = "programs"
 ScholarshipIndexName = "scholar"
