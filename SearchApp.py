@@ -194,17 +194,20 @@ try:
 except ConnectionError as e:
     st.error(f"Connection Error: {e}")
 
-def extract_keywords(query):
+def extract_multiple_keywords(query):
     """
-    Extract relevant keywords from natural language query using OpenAI
+    Extract relevant keywords for multiple search queries using OpenAI
+    Returns a list of keyword sets
     """
     system_prompt = """
     You are a helper that extracts relevant keywords from natural language queries about educational programs and scholarships.
-    Return only the essential keywords that would be useful for searching, separated by commas.
-    Do not include any other text in your response.
+    If the query contains multiple distinct searches, separate them with '|||'.
+    For each search, provide essential keywords separated by commas.
+    Example output for multiple searches:
+    computer science, UK, international students ||| data science, USA, scholarship
     """
     
-    user_prompt = f"Extract search keywords from this query: {query}"
+    user_prompt = f"Extract search keywords for each distinct search from this query: {query}"
     
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -213,52 +216,203 @@ def extract_keywords(query):
             {"role": "user", "content": user_prompt}
         ],
         temperature=0.3,
-        max_tokens=100
+        max_tokens=200
     )
     
-    keywords = response.choices[0].message.content.strip()
-    return keywords
+    keywords_sets = response.choices[0].message.content.strip().split('|||')
+    return [kw.strip() for kw in keywords_sets]
 
-def search_programs(input_keyword, model, max_results=10):
-    vector_of_input_keyword = model.encode(input_keyword)
+def analyze_search_context(keywords, field_weights):
+    """
+    Analyze keywords to determine search context and adjust field weights
+    """
+    # Convert keywords to lowercase for matching
+    keywords_lower = keywords.lower()
     
-    query = {
-        "field": "courseDetailVector",
-        "query_vector": vector_of_input_keyword,
-        "k": max_results,
-        "num_candidates": 500
+    # Context indicators and their corresponding fields
+    context_mapping = {
+        'location': ['location', 'locationVector'],
+        'university': ['universityName', 'universityNameVector'],
+        'course': ['courseTitle', 'courseTitleVector'],
+        'ranking': ['worldRanking'],
+        'fee': ['courseFee'],
+        'city': ['city'],
+        'salary': ['averageStartingSalary'],
+        'qualification': ['qualification', 'qualificationVector'],
+        'deadline': ['deadline'],
+        'funding': ['fundingDetails', 'fundingDetailsVector']
     }
     
-    res = client1.knn_search(
-        index=ProgramindexName,
-        knn=query,
-        source=['location', 'universityName', 'overview', 'worldRanking',
-                'entryRequirements', 'scholarshipsFunding', 'courseTitle',
-                'courseDetail', 'qualification', 'duration', 'nextIntake', 'entryScore',
-                'courseFee', 'howToApply', 'city', 'history', 'averageStartingSalary',
-                'jobPlacementRatio', 'topHiringCompanies']
-    )
-    
-    return res["hits"]["hits"]
-
-def search_scholarships(input_keyword, model, max_results=10):
-    vector_of_input_keyword = model.encode(input_keyword)
-    
-    query = {
-        "field": "universityNameVector",
-        "query_vector": vector_of_input_keyword,
-        "k": max_results,
-        "num_candidates": 500
+    # Keywords that indicate specific contexts
+    context_keywords = {
+        'location': ['in', 'at', 'country', 'location'],
+        'university': ['university', 'college', 'institution'],
+        'course': ['program', 'course', 'degree', 'study'],
+        'ranking': ['ranking', 'ranked', 'top'],
+        'fee': ['fee', 'cost', 'price', 'expensive', 'cheap'],
+        'city': ['city', 'town'],
+        'salary': ['salary', 'pay', 'earning'],
+        'qualification': ['qualification', 'degree', 'certificate'],
+        'deadline': ['deadline', 'due date', 'closing date'],
+        'funding': ['funding', 'scholarship', 'financial']
     }
     
-    res = client2.knn_search(
-        index=ScholarshipIndexName,
-        knn=query,
-        source=['universityName', 'location', 'title', 'qualification', 
-                'fundingDetails', 'deadline', 'eligibleIntake', 'studyMode']
-    )
+    # Identify contexts present in the search
+    active_contexts = []
+    for context, indicators in context_keywords.items():
+        if any(indicator in keywords_lower for indicator in indicators):
+            active_contexts.append(context)
     
-    return res["hits"]["hits"]
+    # Adjust weights based on identified contexts
+    adjusted_weights = field_weights.copy()
+    if active_contexts:
+        # Boost weights for relevant fields
+        boost_factor = 2.0
+        for context in active_contexts:
+            for field in context_mapping[context]:
+                if field in adjusted_weights:
+                    adjusted_weights[field] *= boost_factor
+    
+    return adjusted_weights
+
+def search_programs(input_keywords_list, model, max_results=10):
+    """
+    Context-aware semantic search for programs
+    """
+    all_results = {}
+    base_weights = {
+        "courseDetailVector": 1.0,
+        "overviewVector": 0.9,
+        "entryRequirementsVector": 0.7,
+        "scholarshipsFundingVector": 0.6,
+        "courseTitleVector": 1.0,
+        "universityNameVector": 0.8,
+        "locationVector": 0.8
+    }
+    
+    vector_fields = list(base_weights.keys())
+    
+    for keywords in input_keywords_list:
+        # Analyze context and adjust weights
+        adjusted_weights = analyze_search_context(keywords, base_weights)
+        vector_of_input_keyword = model.encode(keywords)
+        
+        for field in vector_fields:
+            query = {
+                "field": field,
+                "query_vector": vector_of_input_keyword,
+                "k": max_results * 2,
+                "num_candidates": 1000
+            }
+            
+            try:
+                res = client1.knn_search(
+                    index=ProgramindexName,
+                    knn=query,
+                    source=['location', 'universityName', 'overview', 'worldRanking',
+                           'entryRequirements', 'scholarshipsFunding', 'courseTitle',
+                           'courseDetail', 'qualification', 'duration', 'nextIntake', 
+                           'entryScore', 'courseFee', 'howToApply', 'city', 'history',
+                           'averageStartingSalary', 'jobPlacementRatio', 'topHiringCompanies']
+                )
+                
+                for hit in res["hits"]["hits"]:
+                    uni_id = f"{hit['_source']['universityName']}_{hit['_source']['courseTitle']}"
+                    score = hit["_score"] * adjusted_weights[field]
+                    
+                    # Additional context-based scoring
+                    source = hit['_source']
+                    if keywords.lower() in str(source.get('location', '')).lower():
+                        score *= 1.5
+                    if keywords.lower() in str(source.get('courseTitle', '')).lower():
+                        score *= 1.5
+                    if keywords.lower() in str(source.get('universityName', '')).lower():
+                        score *= 1.5
+                    
+                    if uni_id in all_results:
+                        all_results[uni_id]["score"] += score
+                    else:
+                        all_results[uni_id] = {
+                            "hit": hit,
+                            "score": score
+                        }
+                        
+            except Exception as e:
+                st.warning(f"Warning: Search failed for field {field}: {str(e)}")
+                continue
+    
+    sorted_results = sorted(all_results.values(), 
+                          key=lambda x: x["score"], 
+                          reverse=True)
+    
+    return [item["hit"] for item in sorted_results[:max_results]]
+
+def search_scholarships(input_keywords_list, model, max_results=10):
+    """
+    Context-aware semantic search for scholarships
+    """
+    all_results = {}
+    base_weights = {
+        "universityNameVector": 0.8,
+        "titleVector": 1.0,
+        "fundingDetailsVector": 0.9,
+        "qualificationVector": 0.7,
+        "locationVector": 0.6
+    }
+    
+    vector_fields = list(base_weights.keys())
+    
+    for keywords in input_keywords_list:
+        # Analyze context and adjust weights
+        adjusted_weights = analyze_search_context(keywords, base_weights)
+        vector_of_input_keyword = model.encode(keywords)
+        
+        for field in vector_fields:
+            query = {
+                "field": field,
+                "query_vector": vector_of_input_keyword,
+                "k": max_results * 2,
+                "num_candidates": 1000
+            }
+            
+            try:
+                res = client2.knn_search(
+                    index=ScholarshipIndexName,
+                    knn=query,
+                    source=['universityName', 'location', 'title', 'qualification', 
+                           'fundingDetails', 'deadline', 'eligibleIntake', 'studyMode']
+                )
+                
+                for hit in res["hits"]["hits"]:
+                    scholarship_id = f"{hit['_source']['universityName']}_{hit['_source']['title']}"
+                    score = hit["_score"] * adjusted_weights[field]
+                    
+                    # Additional context-based scoring
+                    source = hit['_source']
+                    if keywords.lower() in str(source.get('location', '')).lower():
+                        score *= 1.5
+                    if keywords.lower() in str(source.get('title', '')).lower():
+                        score *= 1.5
+                    if keywords.lower() in str(source.get('universityName', '')).lower():
+                        score *= 1.5
+                    
+                    if scholarship_id in all_results:
+                        all_results[scholarship_id]["score"] += score
+                    else:
+                        all_results[scholarship_id] = {
+                            "hit": hit,
+                            "score": score
+                        }
+                        
+            except Exception as e:
+                st.warning(f"Warning: Search failed for field {field}: {str(e)}")
+                continue
+    
+    sorted_results = sorted(all_results.values(), 
+                          key=lambda x: x["score"], 
+                          reverse=True)
+    
+    return [item["hit"] for item in sorted_results[:max_results]]
 
 def display_program_results(results):
     for result in results:
@@ -366,13 +520,14 @@ def main():
     with search_col:
         st.markdown('<div class="search-container">', unsafe_allow_html=True)
         st.markdown("### 🔍 Ask me anything about programs or scholarships!")
+        st.markdown("*You can search for multiple programs/scholarships at once! For example:* \n\n" +
+                   "*'Find computer science programs in the UK and data science programs in the USA'*")
         search_query = st.text_area(
             "Enter your question in natural language",
-            placeholder="For example: 'Find me computer science programs in the UK with scholarships for international students'",
+            placeholder="For example: 'Find computer science programs in the UK and data science programs in the USA'",
             height=100
         )
         
-        # Modified radio button to remove "Both" option
         search_type = st.radio(
             "What are you looking for?",
             ["Programs", "Scholarships"],
@@ -387,21 +542,21 @@ def main():
     if st.button("🔍 Search", type="primary"):
         if search_query:
             with st.spinner("🔄 Processing your query..."):
-                # Extract keywords
-                keywords = extract_keywords(search_query)
-                st.info(f"🎯 Searching for: {keywords}")
+                # Extract multiple keyword sets
+                keywords_list = extract_multiple_keywords(search_query)
+                st.info(f"🎯 Searching for multiple queries: {' | '.join(keywords_list)}")
                 
-                # Simplified logic for search type
+                # Search based on type
                 if search_type == "Programs":
                     program_results = search_programs(
-                        keywords, 
+                        keywords_list, 
                         model,
                         max_results=max_results
                     )
                     display_program_results(program_results)
                 else:  # search_type == "Scholarships"
                     scholarship_results = search_scholarships(
-                        keywords,
+                        keywords_list,
                         model,
                         max_results=max_results
                     )
