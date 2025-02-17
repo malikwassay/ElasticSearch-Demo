@@ -3,9 +3,11 @@ from elasticsearch import Elasticsearch
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 import os
+import json
 
 # Initialize OpenAI client
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
 
 ProgramindexName = "programs"
 ScholarshipIndexName = "scholar"
@@ -17,267 +19,266 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Replace the existing CSS with this refined version
-
+# CSS styles (your existing CSS code here)
 st.markdown("""
     <style>
-    /* Reset and base styles */
-    .main-title {
-        font-size: 2rem !important;
-        font-weight: 600 !important;
-        margin-bottom: 1.5rem !important;
-        color: #2c3e50 !important;
-        text-align: center;
-        padding: 1.5rem 0;
-        border-bottom: 2px solid #eef2f7;
-    }
-    
-    /* Search container styling */
-    .search-container {
-        background: #ffffff;
-        padding: 1.5rem;
-        border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-        border: 1px solid #eef2f7;
-        margin-bottom: 1.5rem;
-    }
-    
-    /* Result container styling */
-    .result-container {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 6px;
-        margin-bottom: 1rem;
-        border: 1px solid #eef2f7;
-        transition: box-shadow 0.2s ease;
-    }
-    
-    .result-container:hover {
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-    }
-    
-    /* Input fields */
-    .stTextInput > div > div > input {
-        font-size: 1rem !important;
-        padding: 0.75rem !important;
-    }
-    
-    .stTextArea > div > div > textarea {
-        font-size: 1rem !important;
-        padding: 0.75rem !important;
-        min-height: 100px !important;
-    }
-    
-    /* Button styling */
-    .stButton > button {
-        font-size: 1rem !important;
-        padding: 0.75rem 1.5rem !important;
-        font-weight: 500 !important;
-        background: #2c3e50 !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 6px !important;
-    }
-    
-    .stButton > button:hover {
-        background: #34495e !important;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
-    }
-    
-    /* Radio button styling */
-    .stRadio > div {
-        background-color: white;
-        padding: 0.75rem;
-        border-radius: 6px;
-        border: 1px solid #eef2f7;
-    }
-    
-    /* Expander styling */
-    .streamlit-expanderHeader {
-        font-size: 1rem !important;
-        font-weight: 500 !important;
-        background: white !important;
-        border-radius: 6px !important;
-        border: 1px solid #eef2f7 !important;
-    }
-    
-    /* Metric styling */
-    .stMetric {
-        background: white;
-        padding: 0.75rem;
-        border-radius: 6px;
-        border: 1px solid #eef2f7;
-    }
-    
-    .stMetric label {
-        font-size: 0.9rem !important;
-        font-weight: 500 !important;
-        color: #2c3e50 !important;
-    }
-    
-    .stMetric .metric-value {
-        font-size: 1.1rem !important;
-        font-weight: 600 !important;
-    }
-    
-    /* Headers styling */
-    h1, h2, h3 {
-        color: #2c3e50 !important;
-        font-weight: 600 !important;
-    }
-    
-    h3 {
-        font-size: 1.2rem !important;
-        margin-bottom: 1rem !important;
-    }
-    
-    /* Slider styling */
-    .stSlider {
-        padding: 1rem 0;
-    }
-    
-    .stSlider > div > div > div {
-        background-color: #2c3e50 !important;
-    }
-    
-    /* Info boxes styling */
-    .stAlert {
-        background-color: #f8fafc !important;
-        border: 1px solid #eef2f7 !important;
-        padding: 0.75rem !important;
-        border-radius: 6px !important;
-    }
-    
-    /* Spinner styling */
-    .stSpinner > div {
-        border-color: #2c3e50 !important;
-    }
-    
-    /* General text styling */
-    p, div {
-        font-size: 1rem !important;
-    }
-    
-    /* Custom scrollbar */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-    
-    ::-webkit-scrollbar-track {
-        background: #f8fafc;
-    }
-    
-    ::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
-    }
+        /* Base font settings */
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        
+        /* Headings */
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+            font-weight: 600 !important;
+        }
+        
+        .main-title {
+            font-size: 32px !important;
+            font-weight: 700 !important;
+            margin-bottom: 24px !important;
+        }
+        
+        h3 {
+            font-size: 20px !important;
+            margin-bottom: 16px !important;
+        }
+        
+        /* Metrics */
+        [data-testid="stMetricValue"] {
+            font-size: 18px !important;
+            font-weight: 600 !important;
+        }
+        
+        [data-testid="stMetricLabel"] {
+            font-size: 14px !important;
+            font-weight: 400 !important;
+        }
+        
+        /* Search container */
+        .search-container {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        /* Result container */
+        .result-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        /* Expander headers */
+        .streamlit-expanderHeader {
+            font-size: 16px !important;
+            font-weight: 600 !important;
+        }
+        
+        /* Button text */
+        .stButton button {
+            font-size: 16px !important;
+            font-weight: 500 !important;
+        }
+        
+        /* Input fields */
+        .stTextArea textarea {
+            font-size: 16px !important;
+        }
+        
+        /* Radio buttons */
+        .stRadio label {
+            font-size: 16px !important;
+        }
+        
+        /* Slider */
+        .stSlider label {
+            font-size: 16px !important;
+        }
+        
+        /* Info/warning/error messages */
+        .stAlert {
+            font-size: 16px !important;
+        }
     </style>
 """, unsafe_allow_html=True)
-
-try:
-    # Client for programs index
-    client1 = Elasticsearch(
-        "https://149ddf030ad64e34a068782db7c12c33.us-central1.gcp.cloud.es.io:443",
-        api_key="RlhmcEVwVUJ0VDVKQ3FBOFMyUDg6MWZSRll4eWJSWFdEdlZ0cjJZX2RsQQ=="
-    )
+def analyze_search_context(keywords, field_weights, client):
+    """
+    Use OpenAI to analyze search context and adjust field weights intelligently
+    """
+    system_prompt = """
+    You are a search context analyzer for an educational program search engine.
+    Analyze the search query and identify the importance of different aspects (score 0-10, where 10 is highest priority).
+    Output a JSON object with these fields:
+    - location_importance: score for location relevance
+    - university_importance: score for university name relevance
+    - course_importance: score for course/program relevance
+    - ranking_importance: score for university ranking relevance
+    - fee_importance: score for course fee relevance
+    - salary_importance: score for salary/career relevance
+    - qualification_importance: score for degree qualification relevance
+    - detected_location: the location mentioned in the query or null if none
+    """
     
-    # Client for scholarships index
-    client2 = Elasticsearch(
-        "https://149ddf030ad64e34a068782db7c12c33.us-central1.gcp.cloud.es.io:443",
-        api_key="LTNmdkVwVUJ0VDVKQ3FBOFdtUzE6UXpPSThOZXhSaFNDcm50UUNNYThoZw=="
-    )
-except ConnectionError as e:
-    st.error(f"Connection Error: {e}")
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Analyze this search query: {keywords}"}
+            ],
+            temperature=0
+        )
+        
+        # Extract and parse the JSON from the response
+        response_text = response.choices[0].message.content
+        try:
+            # Handle case where response might be already formatted as JSON
+            context_analysis = json.loads(response_text)
+        except json.JSONDecodeError:
+            # If the response contains explanation text, try to extract JSON portion
+            start_idx = response_text.find('{')
+            end_idx = response_text.rfind('}') + 1
+            if start_idx != -1 and end_idx != 0:
+                json_str = response_text[start_idx:end_idx]
+                context_analysis = json.loads(json_str)
+            else:
+                raise ValueError("Could not extract JSON from response")
+
+        # Map importance scores to field weight adjustments
+        field_importance_mapping = {
+            "location": {
+                "fields": ["location", "locationVector", "city"],
+                "score": context_analysis["location_importance"]
+            },
+            "university": {
+                "fields": ["universityName", "universityNameVector"],
+                "score": context_analysis["university_importance"]
+            },
+            "course": {
+                "fields": ["courseTitle", "courseTitleVector", "courseDetail", "courseDetailVector"],
+                "score": context_analysis["course_importance"]
+            },
+            "ranking": {
+                "fields": ["worldRanking"],
+                "score": context_analysis["ranking_importance"]
+            },
+            "fee": {
+                "fields": ["courseFee"],
+                "score": context_analysis["fee_importance"]
+            },
+            "salary": {
+                "fields": ["averageStartingSalary"],
+                "score": context_analysis["salary_importance"]
+            },
+            "qualification": {
+                "fields": ["qualification", "qualificationVector"],
+                "score": context_analysis["qualification_importance"]
+            }
+        }
+        
+        # Adjust weights based on importance scores
+        adjusted_weights = field_weights.copy()
+        for importance_info in field_importance_mapping.values():
+            boost_factor = 1 + (importance_info["score"] / 10)  # Convert 0-10 score to multiplier
+            for field in importance_info["fields"]:
+                if field in adjusted_weights:
+                    adjusted_weights[field] *= boost_factor
+        
+        # Store detected location for later use
+        detected_location = context_analysis.get("detected_location")
+        if detected_location:
+            st.session_state['detected_location'] = detected_location
+        
+        return adjusted_weights, detected_location
+        
+    except Exception as e:
+        st.error(f"Error in context analysis: {e}")
+        return field_weights, None
+
+def normalize_location(location, client):
+    """
+    Normalize location abbreviations to full country names using OpenAI
+    """
+    system_prompt = """
+    You are a helper that converts country abbreviations to their full names.
+    Only respond with the full country name.
+    If the input is already a full country name, return it as is.
+    If the input is not a recognized country or abbreviation, return it as is.
+    """
+    
+    user_prompt = f"Convert this location if it's an abbreviation: {location}"
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0,
+            max_tokens=50
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Error normalizing location: {e}")
+        return location
 
 def extract_multiple_keywords(query):
     """
     Extract relevant keywords for multiple search queries using OpenAI
-    Returns a list of keyword sets
     """
     system_prompt = """
     You are a helper that extracts relevant keywords from natural language queries about educational programs and scholarships.
     If the query contains multiple distinct searches, separate them with '|||'.
     For each search, provide essential keywords separated by commas.
-    Example output for multiple searches:
-    computer science, UK, international students ||| data science, USA, scholarship
+    Keep location abbreviations as is - they will be processed separately.
     """
     
     user_prompt = f"Extract search keywords for each distinct search from this query: {query}"
     
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        temperature=0.3,
-        max_tokens=200
-    )
-    
-    keywords_sets = response.choices[0].message.content.strip().split('|||')
-    return [kw.strip() for kw in keywords_sets]
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3,
+            max_tokens=200
+        )
+        
+        keywords_sets = response.choices[0].message.content.strip().split('|||')
+        normalized_keywords_sets = []
+        
+        for keyword_set in keywords_sets:
+            keywords = [k.strip() for k in keyword_set.split(',')]
+            normalized_keywords = []
+            
+            for keyword in keywords:
+                # Check if keyword might be a location (simple heuristic)
+                if len(keyword) <= 3 or keyword.upper() == keyword:
+                    normalized_location = normalize_location(keyword, client)
+                    normalized_keywords.append(normalized_location)
+                else:
+                    normalized_keywords.append(keyword)
+            
+            normalized_keywords_sets.append(', '.join(normalized_keywords))
+        
+        return normalized_keywords_sets
+        
+    except Exception as e:
+        st.error(f"Error in keyword extraction: {e}")
+        return [query]
 
-def analyze_search_context(keywords, field_weights):
+def search_programs(input_keywords_list, model, client, max_results=10):
     """
-    Analyze keywords to determine search context and adjust field weights
-    """
-    # Convert keywords to lowercase for matching
-    keywords_lower = keywords.lower()
-    
-    # Context indicators and their corresponding fields
-    context_mapping = {
-        'location': ['location', 'locationVector'],
-        'university': ['universityName', 'universityNameVector'],
-        'course': ['courseTitle', 'courseTitleVector'],
-        'ranking': ['worldRanking'],
-        'fee': ['courseFee'],
-        'city': ['city'],
-        'salary': ['averageStartingSalary'],
-        'qualification': ['qualification', 'qualificationVector'],
-        'deadline': ['deadline'],
-        'funding': ['fundingDetails', 'fundingDetailsVector']
-    }
-    
-    # Keywords that indicate specific contexts
-    context_keywords = {
-        'location': ['in', 'at', 'country', 'location'],
-        'university': ['university', 'college', 'institution'],
-        'course': ['program', 'course', 'degree', 'study'],
-        'ranking': ['ranking', 'ranked', 'top'],
-        'fee': ['fee', 'cost', 'price', 'expensive', 'cheap'],
-        'city': ['city', 'town'],
-        'salary': ['salary', 'pay', 'earning'],
-        'qualification': ['qualification', 'degree', 'certificate'],
-        'deadline': ['deadline', 'due date', 'closing date'],
-        'funding': ['funding', 'scholarship', 'financial']
-    }
-    
-    # Identify contexts present in the search
-    active_contexts = []
-    for context, indicators in context_keywords.items():
-        if any(indicator in keywords_lower for indicator in indicators):
-            active_contexts.append(context)
-    
-    # Adjust weights based on identified contexts
-    adjusted_weights = field_weights.copy()
-    if active_contexts:
-        # Boost weights for relevant fields
-        boost_factor = 2.0
-        for context in active_contexts:
-            for field in context_mapping[context]:
-                if field in adjusted_weights:
-                    adjusted_weights[field] *= boost_factor
-    
-    return adjusted_weights
-
-def search_programs(input_keywords_list, model, max_results=10):
-    """
-    Context-aware semantic search for programs
+    Enhanced semantic search for programs with OpenAI context analysis
     """
     all_results = {}
     base_weights = {
@@ -287,14 +288,25 @@ def search_programs(input_keywords_list, model, max_results=10):
         "scholarshipsFundingVector": 0.6,
         "courseTitleVector": 1.0,
         "universityNameVector": 0.8,
-        "locationVector": 0.8
+        "locationVector": 1.2
     }
     
     vector_fields = list(base_weights.keys())
+    location_results = {}
+    
+    try:
+        # Initialize Elasticsearch clients
+        client1 = Elasticsearch(
+            "https://149ddf030ad64e34a068782db7c12c33.us-central1.gcp.cloud.es.io:443",
+            api_key="RlhmcEVwVUJ0VDVKQ3FBOFMyUDg6MWZSRll4eWJSWFdEdlZ0cjJZX2RsQQ=="
+        )
+    except Exception as e:
+        st.error(f"Error connecting to Elasticsearch: {e}")
+        return []
     
     for keywords in input_keywords_list:
-        # Analyze context and adjust weights
-        adjusted_weights = analyze_search_context(keywords, base_weights)
+        # Get context-adjusted weights and detected location
+        adjusted_weights, detected_location = analyze_search_context(keywords, base_weights, client)
         vector_of_input_keyword = model.encode(keywords)
         
         for field in vector_fields:
@@ -310,36 +322,45 @@ def search_programs(input_keywords_list, model, max_results=10):
                     index=ProgramindexName,
                     knn=query,
                     source=['location', 'universityName', 'overview', 'worldRanking',
-                           'entryRequirements', 'scholarshipsFunding', 'courseTitle',
-                           'courseDetail', 'qualification', 'duration', 'nextIntake', 
-                           'entryScore', 'courseFee', 'howToApply', 'city', 'history',
-                           'averageStartingSalary', 'jobPlacementRatio', 'topHiringCompanies']
+                           'courseTitle', 'courseDetail', 'qualification', 'duration',
+                           'nextIntake', 'courseFee', 'city', 'averageStartingSalary']
                 )
                 
                 for hit in res["hits"]["hits"]:
                     uni_id = f"{hit['_source']['universityName']}_{hit['_source']['courseTitle']}"
                     score = hit["_score"] * adjusted_weights[field]
                     
-                    # Additional context-based scoring
+                    # Location-based scoring
                     source = hit['_source']
-                    if keywords.lower() in str(source.get('location', '')).lower():
-                        score *= 1.5
-                    if keywords.lower() in str(source.get('courseTitle', '')).lower():
-                        score *= 1.5
-                    if keywords.lower() in str(source.get('universityName', '')).lower():
-                        score *= 1.5
+                    source_location = str(source.get('location', '')).lower()
                     
+                    # Apply location boost if location was detected
+                    if detected_location and detected_location.lower() in source_location:
+                        score *= 2.0
+                        
                     if uni_id in all_results:
                         all_results[uni_id]["score"] += score
                     else:
                         all_results[uni_id] = {
                             "hit": hit,
-                            "score": score
+                            "score": score,
+                            "location": source_location
                         }
+                        
+                    # Track results by location if location was detected
+                    if detected_location:
+                        if detected_location not in location_results:
+                            location_results[detected_location] = []
+                        if uni_id not in location_results[detected_location]:
+                            location_results[detected_location].append(uni_id)
                         
             except Exception as e:
                 st.warning(f"Warning: Search failed for field {field}: {str(e)}")
                 continue
+    
+    # Check if we found results for detected location
+    if detected_location and (detected_location not in location_results or not location_results[detected_location]):
+        st.warning(f"⚠️ No programs found in {detected_location}. Showing results from other locations.")
     
     sorted_results = sorted(all_results.values(), 
                           key=lambda x: x["score"], 
@@ -347,9 +368,9 @@ def search_programs(input_keywords_list, model, max_results=10):
     
     return [item["hit"] for item in sorted_results[:max_results]]
 
-def search_scholarships(input_keywords_list, model, max_results=10):
+def search_scholarships(input_keywords_list, model, client, max_results=10):
     """
-    Context-aware semantic search for scholarships
+    Enhanced semantic search for scholarships with OpenAI context analysis
     """
     all_results = {}
     base_weights = {
@@ -361,10 +382,20 @@ def search_scholarships(input_keywords_list, model, max_results=10):
     }
     
     vector_fields = list(base_weights.keys())
+    location_results = {}
+    
+    try:
+        # Initialize Elasticsearch client for scholarships
+        client2 = Elasticsearch(
+            "https://149ddf030ad64e34a068782db7c12c33.us-central1.gcp.cloud.es.io:443",
+            api_key="LTNmdkVwVUJ0VDVKQ3FBOFdtUzE6UXpPSThOZXhSaFNDcm50UUNNYThoZw=="
+        )
+    except Exception as e:
+        st.error(f"Error connecting to Elasticsearch: {e}")
+        return []
     
     for keywords in input_keywords_list:
-        # Analyze context and adjust weights
-        adjusted_weights = analyze_search_context(keywords, base_weights)
+        adjusted_weights, detected_location = analyze_search_context(keywords, base_weights, client)
         vector_of_input_keyword = model.encode(keywords)
         
         for field in vector_fields:
@@ -387,26 +418,33 @@ def search_scholarships(input_keywords_list, model, max_results=10):
                     scholarship_id = f"{hit['_source']['universityName']}_{hit['_source']['title']}"
                     score = hit["_score"] * adjusted_weights[field]
                     
-                    # Additional context-based scoring
                     source = hit['_source']
-                    if keywords.lower() in str(source.get('location', '')).lower():
-                        score *= 1.5
-                    if keywords.lower() in str(source.get('title', '')).lower():
-                        score *= 1.5
-                    if keywords.lower() in str(source.get('universityName', '')).lower():
-                        score *= 1.5
+                    source_location = str(source.get('location', '')).lower()
                     
+                    if detected_location and detected_location.lower() in source_location:
+                        score *= 2.0
+                        
                     if scholarship_id in all_results:
                         all_results[scholarship_id]["score"] += score
                     else:
                         all_results[scholarship_id] = {
                             "hit": hit,
-                            "score": score
+                            "score": score,
+                            "location": source_location
                         }
+                        
+                    if detected_location:
+                        if detected_location not in location_results:
+                            location_results[detected_location] = []
+                        if scholarship_id not in location_results[detected_location]:
+                            location_results[detected_location].append(scholarship_id)
                         
             except Exception as e:
                 st.warning(f"Warning: Search failed for field {field}: {str(e)}")
                 continue
+    
+    if detected_location and (detected_location not in location_results or not location_results[detected_location]):
+        st.warning(f"⚠️ No scholarships found in {detected_location}. Showing results from other locations.")
     
     sorted_results = sorted(all_results.values(), 
                           key=lambda x: x["score"], 
@@ -415,6 +453,9 @@ def search_scholarships(input_keywords_list, model, max_results=10):
     return [item["hit"] for item in sorted_results[:max_results]]
 
 def display_program_results(results):
+    """
+    Display program search results in an organized format
+    """
     for result in results:
         with st.container():
             if '_source' in result:
@@ -480,6 +521,9 @@ def display_program_results(results):
                 st.markdown('</div>', unsafe_allow_html=True)
 
 def display_scholarship_results(results):
+    """
+    Display scholarship search results in an organized format
+    """
     for result in results:
         with st.container():
             if '_source' in result:
@@ -520,11 +564,13 @@ def main():
     with search_col:
         st.markdown('<div class="search-container">', unsafe_allow_html=True)
         st.markdown("### 🔍 Ask me anything about programs or scholarships!")
-        st.markdown("*You can search for multiple programs/scholarships at once! For example:* \n\n" +
-                   "*'Find computer science programs in the UK and data science programs in the USA'*")
+        st.markdown("*Try natural language queries! For example:* \n\n" +
+                   "*'Find affordable computer science programs in the UK with good job prospects'* or \n" +
+                   "*'Show me engineering scholarships in Australia for international students'*")
+        
         search_query = st.text_area(
             "Enter your question in natural language",
-            placeholder="For example: 'Find computer science programs in the UK and data science programs in the USA'",
+            placeholder="For example: 'Find affordable computer science programs in the UK with good job prospects'",
             height=100
         )
         
@@ -538,29 +584,54 @@ def main():
     with filter_col:
         st.markdown("### ⚙️ Search Filters")
         max_results = st.slider("Maximum Results", 1, 50, 10)
+        
+        # Add advanced filters if needed
+        with st.expander("Advanced Filters"):
+            st.markdown("Coming soon...")
     
     if st.button("🔍 Search", type="primary"):
         if search_query:
             with st.spinner("🔄 Processing your query..."):
                 # Extract multiple keyword sets
                 keywords_list = extract_multiple_keywords(search_query)
-                st.info(f"🎯 Searching for multiple queries: {' | '.join(keywords_list)}")
+                st.info(f"🎯 Searching with refined keywords: {' | '.join(keywords_list)}")
                 
-                # Search based on type
-                if search_type == "Programs":
-                    program_results = search_programs(
-                        keywords_list, 
-                        model,
-                        max_results=max_results
-                    )
-                    display_program_results(program_results)
-                else:  # search_type == "Scholarships"
-                    scholarship_results = search_scholarships(
-                        keywords_list,
-                        model,
-                        max_results=max_results
-                    )
-                    display_scholarship_results(scholarship_results)
+                try:
+                    # Search based on type
+                    if search_type == "Programs":
+                        program_results = search_programs(
+                            keywords_list, 
+                            model,
+                            client,
+                            max_results=max_results
+                        )
+                        if program_results:
+                            #st.success(f"Found {len(program_results)} matching programs!")
+                            display_program_results(program_results)
+                        else:
+                            st.info("No matching programs found. Try broadening your search criteria.")
+                    else:  # search_type == "Scholarships"
+                        scholarship_results = search_scholarships(
+                            keywords_list,
+                            model,
+                            client,
+                            max_results=max_results
+                        )
+                        if scholarship_results:
+                            st.success(f"Found {len(scholarship_results)} matching scholarships!")
+                            display_scholarship_results(scholarship_results)
+                        else:
+                            st.info("No matching scholarships found. Try broadening your search criteria.")
+                
+                except Exception as e:
+                    st.error(f"An error occurred during search: {str(e)}")
+                    st.info("Please try again with a different search query.")
+        else:
+            st.warning("Please enter a search query.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        st.error(f"Application Error: {str(e)}")
+        st.info("Please refresh the page and try again.")
